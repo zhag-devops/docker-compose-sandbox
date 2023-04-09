@@ -1,7 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import os
+import redis
 
 app = Flask(__name__)
+
+redis_conn = redis.Redis(host=os.environ.get('FLASK_REDIS_HOST', 'redis'), port=os.environ.get('FLASK_REDIS_PORT', '6379'))
 
 @app.route('/health')
 def health_check():
@@ -11,6 +14,18 @@ def health_check():
 def environment():
     environment = os.environ.get('FLASK_ENVIRONMENT', 'unknown')
     return jsonify({'environment': environment})
+
+@app.route('/jobs', methods=['POST'])
+def add_job():
+    data = request.get_json()
+    name = data.get('name')
+    redis_conn.lpush('jobs', name) # add the job to the Redis queue
+    return '', 204
+
+@app.route('/all-jobs')
+def all_jobs():
+    jobs = [job.decode() for job in redis_conn.lrange('jobs', 0, -1)] # get all jobs from Redis queue
+    return jsonify({'jobs': jobs})
 
 if __name__ == '__main__':
     app.run(port=5050)
